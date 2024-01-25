@@ -13,16 +13,24 @@ class MyApp extends StatelessWidget {
   }
 }
 
+class RallyTrack {
+  final String name;
+  final List<String> paceNotes;
+
+  RallyTrack({required this.name, required this.paceNotes});
+}
+
 class PaceNotesScreen extends StatefulWidget {
   @override
   _PaceNotesScreenState createState() => _PaceNotesScreenState();
 }
 
 class _PaceNotesScreenState extends State<PaceNotesScreen> {
-  List<String> paceNotes = [];
+  List<RallyTrack> rallyTracks = [];
   int currentNoteIndex = 0;
   String feedbackMessage = '';
 
+  TextEditingController rallyNameController = TextEditingController();
   TextEditingController paceNoteController = TextEditingController();
 
   @override
@@ -37,22 +45,43 @@ class _PaceNotesScreenState extends State<PaceNotesScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextField(
+              controller: rallyNameController,
+              onChanged: (value) {
+                // Allow the user to enter the rally/track name
+              },
+              decoration: InputDecoration(labelText: 'Enter Rally/Track Name'),
+            ),
+            TextField(
               controller: paceNoteController,
               onChanged: (value) {
                 // Allow the user to add pace notes
-                // You can add validation or additional logic here
               },
               decoration: InputDecoration(labelText: 'Enter Pace Note'),
             ),
             SizedBox(height: 16),
             ElevatedButton(
               onPressed: () {
-                // Add pace note to the list
-                setState(() {
-                  paceNotes.add(paceNoteController.text);
-                  paceNoteController.clear();
-                  feedbackMessage = 'Pace note added!';
-                });
+                // Save pace note with rally/track name
+                String rallyName = rallyNameController.text.trim();
+                if (rallyName.isNotEmpty && paceNoteController.text.isNotEmpty) {
+                  RallyTrack rallyTrack = rallyTracks.firstWhere(
+                    (track) => track.name == rallyName,
+                    orElse: () {
+                      RallyTrack newTrack = RallyTrack(name: rallyName, paceNotes: []);
+                      rallyTracks.add(newTrack);
+                      return newTrack;
+                    },
+                  );
+                  setState(() {
+                    rallyTrack.paceNotes.add(paceNoteController.text);
+                    paceNoteController.clear();
+                    feedbackMessage = 'Pace note added!';
+                  });
+                } else {
+                  setState(() {
+                    feedbackMessage = 'Enter both rally/track name and pace note!';
+                  });
+                }
 
                 // Reset feedback message after a short delay
                 Future.delayed(Duration(seconds: 2), () {
@@ -67,30 +96,37 @@ class _PaceNotesScreenState extends State<PaceNotesScreen> {
             ElevatedButton(
               onPressed: () {
                 // Start the race
-                setState(() {
-                  currentNoteIndex = 0;
-                });
-
-                // You can add logic here to customize the behavior when the race starts
-                if (paceNotes.isNotEmpty) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => PaceNoteFullScreenScreen(
-                        paceNotes: paceNotes,
-                        onNoteIndexChanged: (index) {
-                          setState(() {
-                            currentNoteIndex = index;
-                          });
-                        },
-                        onResetPressed: () {
-                          setState(() {
-                            paceNotes.clear();
-                          });
-                        },
-                      ),
-                    ),
+                if (rallyTracks.isNotEmpty) {
+                  showDialog(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return AlertDialog(
+                        title: Text('Select Rally/Track'),
+                        content: Column(
+                          children: rallyTracks.map((track) {
+                            return ListTile(
+                              title: Text(track.name),
+                              onTap: () {
+                                Navigator.pop(context);
+                                navigateToFullScreen(track);
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      );
+                    },
                   );
+                } else {
+                  setState(() {
+                    feedbackMessage = 'Add pace notes before starting the race!';
+                  });
+
+                  // Reset feedback message after a short delay
+                  Future.delayed(Duration(seconds: 2), () {
+                    setState(() {
+                      feedbackMessage = '';
+                    });
+                  });
                 }
               },
               child: Text('Start Race'),
@@ -106,15 +142,36 @@ class _PaceNotesScreenState extends State<PaceNotesScreen> {
       ),
     );
   }
+
+  void navigateToFullScreen(RallyTrack rallyTrack) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PaceNoteFullScreenScreen(
+          rallyTrack: rallyTrack,
+          onNoteIndexChanged: (index) {
+            setState(() {
+              currentNoteIndex = index;
+            });
+          },
+          onResetPressed: () {
+            setState(() {
+              rallyTrack.paceNotes.clear();
+            });
+          },
+        ),
+      ),
+    );
+  }
 }
 
 class PaceNoteFullScreenScreen extends StatefulWidget {
-  final List<String> paceNotes;
+  final RallyTrack rallyTrack;
   final Function(int) onNoteIndexChanged;
   final VoidCallback onResetPressed;
 
   PaceNoteFullScreenScreen({
-    required this.paceNotes,
+    required this.rallyTrack,
     required this.onNoteIndexChanged,
     required this.onResetPressed,
   });
@@ -139,13 +196,18 @@ class _PaceNoteFullScreenScreenState extends State<PaceNoteFullScreenScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
+              'Rally/Track: ${widget.rallyTrack.name}',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 16),
+            Text(
               'Current Pace Note:',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 16),
             Text(
-              '${currentNoteIndex + 1}. ${widget.paceNotes[currentNoteIndex]}',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold), // Adjust the font size here
+              '${currentNoteIndex + 1}. ${widget.rallyTrack.paceNotes[currentNoteIndex]}',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             SizedBox(height: 16),
@@ -166,7 +228,7 @@ class _PaceNoteFullScreenScreenState extends State<PaceNoteFullScreenScreen> {
                 ElevatedButton(
                   onPressed: () {
                     // Show the next pace note
-                    if (currentNoteIndex < widget.paceNotes.length - 1) {
+                    if (currentNoteIndex < widget.rallyTrack.paceNotes.length - 1) {
                       setState(() {
                         currentNoteIndex++;
                       });
@@ -179,7 +241,7 @@ class _PaceNoteFullScreenScreenState extends State<PaceNoteFullScreenScreen> {
             SizedBox(height: 16),
             ElevatedButton(
               onPressed: () {
-                // Reset the pace note list
+                // Reset the pace note list for the specific rally/track
                 widget.onResetPressed();
                 Navigator.pop(context); // Close the full-screen view
               },
